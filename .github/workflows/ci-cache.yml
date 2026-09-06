@@ -10,9 +10,13 @@ on:
         type: string
 
 jobs:
-  ci:
-    name: Running CI
+  # Level 1 (root): builds the shared yarn cache and installs deps once.
+  setup:
+    name: Setup & install
     runs-on: ubuntu-latest
+    outputs:
+      node_version: ${{ steps.node.outputs.version }}
+      commit: ${{ steps.commit.outputs.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -23,6 +27,10 @@ jobs:
           echo "Hello world 🚀"
           echo ${{ inputs.myCommit }}
 
+      - name: Capture commit
+        id: commit
+        run: echo "sha=${{ inputs.myCommit }}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-node@v7
         with:
           node-version: v24.20.0
@@ -30,6 +38,42 @@ jobs:
           # Useful for caching dependencies in monorepos:
           cache-dependency-path: yarn.lock
 
+      - name: Get node version
+        id: node
+        run: echo "version=$(node -v)" >> "$GITHUB_OUTPUT"
+
       - run: yarn install
 
-      ### - run: yarn test
+  # Level 2: these run in PARALLEL, but only after `setup` finishes.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Use setup output
+        run: |
+          echo "lint sees node ${{ needs.setup.outputs.node_version }}"
+          echo "lint sees commit ${{ needs.setup.outputs.commit }}"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - run: echo "test (parallel with lint) on ${{ needs.setup.outputs.node_version }}"
+
+  # Level 3: fan-in. `build` waits on BOTH lint and test.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - run: echo "build only starts after lint AND test succeed"
+
+  # Level 4: nested chain. `deploy` waits on `build`.
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - run: echo "deploy only starts after build succeeds"
