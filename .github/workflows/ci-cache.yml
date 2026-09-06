@@ -10,6 +10,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: echo check
+        run: |
+          set -eou pipefail
+          echo "Hello world 🚀"
+
       - uses: actions/setup-node@v4
         with:
           node-version: v24.20.0
